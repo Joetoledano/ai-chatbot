@@ -64,5 +64,6 @@ export async function POST(req: Request) {
     return new StreamingTextResponse(stream)
   } catch (e) {
     console.error(`the error converting the response to a stream`, e)
+    return e
   }
 }
