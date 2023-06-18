@@ -11,25 +11,28 @@ export async function POST(req: Request) {
   const json = await req.json()
   const { messages, previewToken } = json
   const session = await auth()
-
+  console.log('the session', session)
   if (process.env.VERCEL_ENV !== 'preview') {
-    if (session == null) {
-      return new Response('Unauthorized', { status: 401 })
-    }
+    // if (session == null) {
+    //   return new Response('Unauthorized', { status: 401 })
+    // }
   }
 
   const configuration = new Configuration({
     apiKey: previewToken || process.env.OPENAI_API_KEY
   })
+  console.log('the key', previewToken || process.env.OPENAI_API_KEY)
 
   const openai = new OpenAIApi(configuration)
 
   const res = await openai.createChatCompletion({
-    model: 'gpt-3.5-turbo',
+    model: 'gpt-3.5-turbo-0613',
     messages,
     temperature: 0.7,
     stream: true
   })
+
+  console.log('the res', res)
 
   const stream = OpenAIStream(res, {
     async onCompletion(completion) {
