@@ -11,7 +11,6 @@ export async function POST(req: Request) {
   const json = await req.json()
   const { messages, previewToken } = json
   const session = await auth()
-  console.log('the session', session)
   if (process.env.VERCEL_ENV !== 'preview') {
     // if (session == null) {
     //   return new Response('Unauthorized', { status: 401 })
@@ -19,51 +18,52 @@ export async function POST(req: Request) {
   }
 
   const configuration = new Configuration({
-    apiKey: previewToken || process.env.OPENAI_API_KEY
+    apiKey: process.env.OPENAI_API_KEY
   })
-  console.log('the key', previewToken || process.env.OPENAI_API_KEY)
 
   const openai = new OpenAIApi(configuration)
 
   const res = await openai.createChatCompletion({
-    model: 'gpt-3.5-turbo-0613',
+    model: 'gpt-3.5-turbo',
     messages,
     temperature: 0.7,
     stream: true
   })
 
-  console.log('the res', res)
-
-  const stream = OpenAIStream(res, {
-    async onCompletion(completion) {
-      const title = json.messages[0].content.substring(0, 100)
-      const userId = session?.user.id
-      if (userId) {
-        const id = json.id ?? nanoid()
-        const createdAt = Date.now()
-        const path = `/chat/${id}`
-        const payload = {
-          id,
-          title,
-          userId,
-          createdAt,
-          path,
-          messages: [
-            ...messages,
-            {
-              content: completion,
-              role: 'assistant'
-            }
-          ]
+  try {
+    const stream = OpenAIStream(res, {
+      async onCompletion(completion) {
+        const title = json.messages[0].content.substring(0, 100)
+        const userId = session?.user.id
+        if (userId) {
+          const id = json.id ?? nanoid()
+          const createdAt = Date.now()
+          const path = `/chat/${id}`
+          const payload = {
+            id,
+            title,
+            userId,
+            createdAt,
+            path,
+            messages: [
+              ...messages,
+              {
+                content: completion,
+                role: 'assistant'
+              }
+            ]
+          }
+          await kv.hmset(`chat:${id}`, payload)
+          await kv.zadd(`user:chat:${userId}`, {
+            score: createdAt,
+            member: `chat:${id}`
+          })
         }
-        await kv.hmset(`chat:${id}`, payload)
-        await kv.zadd(`user:chat:${userId}`, {
-          score: createdAt,
-          member: `chat:${id}`
-        })
       }
-    }
-  })
-
-  return new StreamingTextResponse(stream)
+    })
+    console.log(`the stream`, stream)
+    return new StreamingTextResponse(stream)
+  } catch (e) {
+    console.error(`the error converting the response to a stream`, e)
+  }
 }
