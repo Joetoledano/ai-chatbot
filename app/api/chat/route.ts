@@ -2,6 +2,7 @@ import { kv } from '@vercel/kv'
 import { OpenAIStream, StreamingTextResponse } from 'ai'
 import { Configuration, OpenAIApi } from 'openai-edge'
 
+import { auth } from '@/auth'
 import { nanoid } from '@/lib/utils'
 
 export const runtime = 'edge'
@@ -9,12 +10,12 @@ export const runtime = 'edge'
 export async function POST(req: Request) {
   const json = await req.json()
   const { messages, previewToken } = json
-  // const session = await auth()
-  // if (process.env.VERCEL_ENV !== 'preview') {
-  //   if (session == null) {
-  //     return new Response('Unauthorized', { status: 401 })
-  //   }
-  // }
+  const session = await auth()
+  if (process.env.VERCEL_ENV !== 'preview') {
+    if (session == null) {
+      return new Response('Unauthorized', { status: 401 })
+    }
+  }
 
   const configuration = new Configuration({
     apiKey: process.env.OPENAI_API_KEY
@@ -23,7 +24,7 @@ export async function POST(req: Request) {
   const openai = new OpenAIApi(configuration)
 
   const res = await openai.createChatCompletion({
-    model: 'gpt-3.5-turbo',
+    model: 'gpt-3.5-turbo-0613',
     messages,
     temperature: 0.7,
     stream: true
@@ -33,7 +34,7 @@ export async function POST(req: Request) {
     const stream = OpenAIStream(res, {
       async onCompletion(completion) {
         const title = json.messages[0].content.substring(0, 100)
-        const userId = 10
+        const userId = session?.user.id
         if (userId) {
           const id = json.id ?? nanoid()
           const createdAt = Date.now()
@@ -60,10 +61,8 @@ export async function POST(req: Request) {
         }
       }
     })
-    console.log(`the stream`, stream)
     return new StreamingTextResponse(stream)
   } catch (e) {
     console.error(`the error converting the response to a stream`, e)
-    return e
   }
 }
